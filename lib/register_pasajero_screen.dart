@@ -12,28 +12,38 @@ class RegistroPasajeroScreen extends StatefulWidget {
 class _RegistroPasajeroScreenState extends State<RegistroPasajeroScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false; // Añadido para controlar la carga
+  bool _isLoading = false;
 
   Future<void> _registrarPasajero() async {
-    setState(() => _isLoading = true); // Activar indicador de carga
+    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Por favor, llena los campos")));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final supabase = Supabase.instance.client;
+
     try {
-      final supabase = Supabase.instance.client;
       final authRes = await supabase.auth.signUp(
         email: "${_emailController.text.trim()}@transpayy.com",
         password: _passwordController.text.trim(),
       );
 
-      if (authRes.user != null) {
-        await supabase.from('pasajeros').insert({'id': authRes.user!.id});
-        
-        if (!mounted) return;
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
-      }
+      if (authRes.user == null) throw Exception("Error al crear cuenta.");
+
+      // Inserción directa en pasajeros
+      await supabase.from('pasajeros').insert({
+        'id': authRes.user!.id,
+      });
+      
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
+
     } catch (e) {
-      if (!mounted) return; // Verificación necesaria
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent));
     } finally {
-      if (mounted) setState(() => _isLoading = false); // Desactivar carga
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -44,13 +54,12 @@ class _RegistroPasajeroScreenState extends State<RegistroPasajeroScreen> {
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Carnet")),
             TextField(controller: _passwordController, decoration: const InputDecoration(labelText: "Contraseña"), obscureText: true),
             const SizedBox(height: 20),
-            _isLoading 
-              ? const CircularProgressIndicator() 
-              : ElevatedButton(onPressed: _registrarPasajero, child: const Text("Registrarse")),
+            _isLoading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _registrarPasajero, child: const Text("Registrarse")),
           ],
         ),
       ),
