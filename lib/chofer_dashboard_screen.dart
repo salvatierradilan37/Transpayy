@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'login_screen.dart';
@@ -18,9 +18,10 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   bool _isLoading = true;
   String _estadoChofer = 'pendiente';
   bool _deTurno = false;
-  
+  double _saldoChofer = 0.0;
+
   Map<String, dynamic>? _perfilChofer;
-  List<dynamic> _rutasDisponibles = []; // Se eliminó _rutaAsignada para quitar el error
+  List<dynamic> _rutasDisponibles = [];
 
   @override
   void initState() {
@@ -31,7 +32,7 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   }
 
   void _configurarTTS() async {
-    await _flutterTts.setLanguage("es-ES");
+    await _flutterTts.setLanguage('es-ES');
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setSpeechRate(0.5);
   }
@@ -45,9 +46,52 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
           if (data.isNotEmpty) {
             final ultimoPago = data.last;
             String monto = ultimoPago['monto'].toString();
-            await _flutterTts.speak("Pago recibido de $monto Bolivianos");
+            await _flutterTts.speak('Pago recibido de $monto Bolivianos');
+            await _cargarSaldoChofer();
           }
         });
+  }
+
+  Future<void> _cargarSaldoChofer() async {
+    try {
+      double saldo = 0.0;
+      bool saldoObtenido = false;
+
+      try {
+        final billeteraData = await supabase
+            .from('billetera')
+            .select('saldo')
+            .eq('id_usuario', user.id)
+            .maybeSingle();
+        if (billeteraData != null) {
+          saldo = double.tryParse(billeteraData['saldo'].toString()) ?? 0.0;
+          saldoObtenido = true;
+        }
+      } catch (e) {
+        debugPrint('No se pudo leer billetera del chofer: $e');
+      }
+
+      if (!saldoObtenido) {
+        final transaccionesRes = await supabase
+            .from('transacciones')
+            .select('monto')
+            .eq('id_chofer', user.id)
+            .eq('estado', 'completado') as List<dynamic>?;
+
+        for (final item in transaccionesRes ?? []) {
+          if (item is Map && item['monto'] != null) {
+            saldo += double.tryParse(item['monto'].toString()) ?? 0.0;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _saldoChofer = saldo;
+      });
+    } catch (e) {
+      debugPrint('Error cargando saldo chofer: $e');
+    }
   }
 
   Future<void> _verificarEstadoYDatos() async {
@@ -68,9 +112,10 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
       if (_estadoChofer == 'aprobado') {
         final rutasRes = await supabase.from('rutas').select();
         _rutasDisponibles = rutasRes as List;
+        await _cargarSaldoChofer();
       }
     } catch (e) {
-      debugPrint("Error cargando datos: $e");
+      debugPrint('Error cargando datos: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -79,16 +124,20 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   Future<void> _cambiarTurno(bool activar) async {
     setState(() => _deTurno = activar);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(activar ? "Turno Iniciado" : "Jornada Finalizada"))
+      SnackBar(
+          content: Text(activar ? 'Turno Iniciado' : 'Jornada Finalizada')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     if (_estadoChofer == 'pendiente') {
       return Scaffold(
+        backgroundColor: const Color(0xFF081628),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -96,11 +145,28 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.lock_clock, size: 80, color: Colors.orange),
-                const Text("Cuenta en Revisión", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                const Text("Espera a que el administrador apruebe tu registro.", textAlign: TextAlign.center),
                 const SizedBox(height: 20),
-                ElevatedButton(onPressed: _verificarEstadoYDatos, child: const Text("Verificar ahora")),
+                const Text('Cuenta en Revisión',
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+                const SizedBox(height: 12),
+                const Text('Espera a que el administrador apruebe tu registro.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70)),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF40E0FF),
+                      foregroundColor: Colors.black),
+                  onPressed: _verificarEstadoYDatos,
+                  child: const Padding(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 22.0, vertical: 14.0),
+                    child: Text('Verificar ahora'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -109,129 +175,279 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFF061228),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Panel del Chofer"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('Panel del Chofer',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _verificarEstadoYDatos),
           IconButton(
-            icon: const Icon(Icons.logout),
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              onPressed: _verificarEstadoYDatos),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               final navigator = Navigator.of(context);
               await supabase.auth.signOut();
-              navigator.pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+              navigator.pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()));
             },
           )
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.blue.shade900,
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.directions_bus, size: 40, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        onRefresh: _verificarEstadoYDatos,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                      colors: [Color(0xFF0257A2), Color(0xFF001F44)]),
+                  borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(32),
+                      bottomRight: Radius.circular(32)),
+                ),
+                padding: const EdgeInsets.fromLTRB(22, 90, 22, 30),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        const Text("Chofer Profesional", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        Text("Placa: ${_perfilChofer?['placa_bus'] ?? 'S/P'}", style: const TextStyle(color: Colors.white70)),
+                        CircleAvatar(
+                          radius: 32,
+                          backgroundColor: Colors.white24,
+                          child: const Icon(Icons.directions_bus,
+                              size: 36, color: Colors.white),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Chofer Profesional',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 14)),
+                              const SizedBox(height: 6),
+                              Text(
+                                  'Placa: ${_perfilChofer?['placa_bus'] ?? 'S/P'}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Text('Estado: ${_estadoChofer.toUpperCase()}',
+                                  style:
+                                      const TextStyle(color: Colors.white70)),
+                              const SizedBox(height: 6),
+                              Text(
+                                  'Saldo: ${_saldoChofer.toStringAsFixed(2)} Bs',
+                                  style:
+                                      const TextStyle(color: Colors.white70)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _deTurno ? Colors.green : Colors.white24,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Text(
+                            _deTurno ? 'EN TURNO' : 'OFFLINE',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  Chip(
-                    label: Text(_deTurno ? "EN TURNO" : "OFFLINE"),
-                    backgroundColor: _deTurno ? Colors.green : Colors.grey,
-                    labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  )
-                ],
-              ),
-            ),
-            Card(
-              margin: const EdgeInsets.all(12),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Image.network("https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${user.id}", height: 90, width: 90),
-                    const SizedBox(width: 15),
-                    const Expanded(
+                    const SizedBox(height: 22),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Mi Código QR de Pago", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Text("Mantén este QR visible para recibir cobros.", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                          const Text('Código QR de Pagos',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
+                          const SizedBox(height: 14),
+                          Center(
+                            child: Image.network(
+                              'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${user.id}',
+                              height: 160,
+                              width: 160,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                              'Mantén este QR visible para recibir cobros.',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
                         ],
                       ),
-                    )
+                    ),
                   ],
                 ),
               ),
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: _deTurno 
-                ? ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size(double.infinity, 50)),
-                    onPressed: () => _cambiarTurno(false),
-                    icon: const Icon(Icons.power_settings_new, color: Colors.white),
-                    label: const Text("Terminar Turno / Finalizar Jornada", style: TextStyle(color: Colors.white, fontSize: 16)),
-                  )
-                : Column(
-                    children: [
-                      const Text("Selecciona tu ruta para iniciar jornada:"),
-                      const SizedBox(height: 10),
-                      ..._rutasDisponibles.map((r) => Card(
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _deTurno
+                    ? ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        icon: const Icon(Icons.power_settings_new),
+                        label: const Text('Finalizar Jornada',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: () => _cambiarTurno(false),
+                      )
+                    : ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF40E0FF),
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Iniciar Turno',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: () => _cambiarTurno(true),
+                      ),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Rutas Disponibles',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    if (_rutasDisponibles.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white12,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                            'No hay rutas disponibles por el momento.',
+                            style: TextStyle(color: Colors.white70)),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _rutasDisponibles.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final ruta = _rutasDisponibles[index];
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white12,
+                              borderRadius: BorderRadius.circular(22),
+                            ),
                             child: ListTile(
-                              title: Text(r['nombre_ruta'] ?? 'Ruta'),
-                              subtitle: Text("${r['origen']} - ${r['destino']}"),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 18, vertical: 14),
+                              leading: const Icon(Icons.alt_route,
+                                  color: Color(0xFF40E0FF), size: 32),
+                              title: Text(
+                                  ruta['nombre_ruta'] ?? 'Ruta sin nombre',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold)),
+                              subtitle: Text(
+                                  '${ruta['origen'] ?? 'N/A'} → ${ruta['destino'] ?? 'N/A'}',
+                                  style:
+                                      const TextStyle(color: Colors.white70)),
                               trailing: ElevatedButton(
-                                onPressed: () => _cambiarTurno(true),
-                                child: const Text("Iniciar Turno"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF40E0FF),
+                                  foregroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14)),
+                                ),
+                                onPressed:
+                                    _deTurno ? null : () => _cambiarTurno(true),
+                                child: const Text('Seleccionar'),
                               ),
                             ),
-                          )),
-                    ],
-                  ),
-            ),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Text("Historial de Pagos Recibidos (Hoy)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-            ),
-            Container(
-              height: 200,
-              margin: const EdgeInsets.all(12),
-              child: StreamBuilder<List<Map<String, dynamic>>>(
-                stream: supabase.from('transacciones').stream(primaryKey: ['id']).eq('id_chofer', user.id),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text("Sin transacciones hoy."));
-                  }
-                  final pagos = snapshot.data!.reversed.toList();
-                  return ListView.builder(
-                    itemCount: pagos.length,
-                    itemBuilder: (context, index) {
-                      final p = pagos[index];
-                      return ListTile(
-                        leading: const Icon(Icons.monetization_on, color: Colors.green),
-                        title: Text("Monto: ${p['monto']} Bs"),
-                        subtitle: Text("Fecha: ${p['fecha'] ?? ''}"),
-                      );
-                    },
-                  );
-                },
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                    const Text('Historial de pagos recibidos',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 240,
+                      child: StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: supabase.from('transacciones').stream(
+                            primaryKey: ['id']).eq('id_chofer', user.id),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Center(
+                                child: Text('Sin transacciones recientes.',
+                                    style: TextStyle(color: Colors.white70)));
+                          }
+                          final pagos = snapshot.data!.reversed.toList();
+                          return ListView.separated(
+                            itemCount: pagos.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(color: Colors.white12),
+                            itemBuilder: (context, index) {
+                              final pago = pagos[index];
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 0, vertical: 8),
+                                leading: const Icon(Icons.monetization_on,
+                                    color: Colors.greenAccent),
+                                title: Text('Monto: ${pago['monto']} Bs',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold)),
+                                subtitle: Text('Fecha: ${pago['fecha'] ?? '-'}',
+                                    style:
+                                        const TextStyle(color: Colors.white70)),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
-          ],
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );

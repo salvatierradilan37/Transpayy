@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import 'login_screen.dart';
+import 'notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,15 +15,16 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final user = Supabase.instance.client.auth.currentUser!;
   final supabase = Supabase.instance.client;
+  final ImagePicker _picker = ImagePicker();
+  final MobileScannerController _scannerController = MobileScannerController();
 
   bool _isLoading = true;
   double _saldoBilletera = 0.0;
   String _estadoPasajero = 'pendiente';
-  
-  String _nombreCompleto = "Cargando...";
-  String _emailUsuario = "";
-  String _fotoRostroUrl = "";
-  String _categoriaPasajero = "Regular";
+  String _nombreCompleto = 'Cargando...';
+  String _emailUsuario = '';
+  String _fotoRostroUrl = '';
+  String _categoriaPasajero = 'Regular';
 
   List<dynamic> _historialViajes = [];
   List<dynamic> _rutasYBusenTurno = [];
@@ -29,8 +32,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _emailUsuario = user.email ?? "usuario@transpayy.com";
+    _emailUsuario = user.email ?? 'usuario@transpayy.com';
     _cargarDatosCompletosPasajero();
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
   }
 
   Future<void> _cargarDatosCompletosPasajero() async {
@@ -47,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _estadoPasajero = pasajeroData['estado'] ?? 'aprobado';
         _fotoRostroUrl = pasajeroData['foto_rostro_url'] ?? '';
         _categoriaPasajero = pasajeroData['categoria'] ?? 'Regular';
-        
         _nombreCompleto = _emailUsuario.split('@').first.toUpperCase();
       }
 
@@ -59,7 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
             .maybeSingle();
 
         if (billeteraData != null) {
-          _saldoBilletera = double.tryParse(billeteraData['saldo'].toString()) ?? 0.0;
+          _saldoBilletera =
+              double.tryParse(billeteraData['saldo'].toString()) ?? 0.0;
         }
 
         final transaccionesRes = await supabase
@@ -75,19 +84,42 @@ class _HomeScreenState extends State<HomeScreen> {
         _rutasYBusenTurno = rutasRes as List;
       }
     } catch (e) {
-      debugPrint("Error general en el dashboard: $e");
+      debugPrint('Error general en el dashboard: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  double _calcularCostoPasaje() {
+    switch (_categoriaPasajero.toLowerCase()) {
+      case 'estudiante':
+        return 1.00;
+      case 'tercera_edad':
+      case 'adulto mayor':
+        return 1.00;
+      default:
+        return 2.00;
+    }
+  }
+
+  bool _esViaje(dynamic item) {
+    final tipo = item['tipo']?.toString().toLowerCase();
+    return tipo == 'debito' || tipo == 'pago';
+  }
+
+  bool _esRecarga(dynamic item) {
+    final tipo = item['tipo']?.toString().toLowerCase();
+    return tipo == 'credito' || tipo == 'recarga';
+  }
+
   Future<void> _procesarPagoPasaje(String idChofer) async {
-    const double costoPasaje = 2.00;
+    final double costoPasaje = _calcularCostoPasaje();
 
     if (_saldoBilletera < costoPasaje) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Saldo insuficiente en tu billetera digital.")),
+        const SnackBar(
+            content: Text('❌ Saldo insuficiente en tu billetera digital.')),
       );
       return;
     }
@@ -95,7 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
     try {
       final nuevoSaldo = _saldoBilletera - costoPasaje;
-      await supabase.from('billetera').update({'saldo': nuevoSaldo}).eq('id_usuario', user.id);
+      await supabase
+          .from('billetera')
+          .update({'saldo': nuevoSaldo}).eq('id_usuario', user.id);
 
       await supabase.from('transacciones').insert({
         'pasajero_id': user.id,
@@ -103,37 +137,216 @@ class _HomeScreenState extends State<HomeScreen> {
         'monto': costoPasaje,
         'tipo': 'debito',
         'estado': 'completado',
-        'fecha': DateTime.now().toIso8601String()
+        'fecha': DateTime.now().toIso8601String(),
       });
 
-      final billeteraChofer = await supabase.from('billetera').select('saldo').eq('id_usuario', idChofer).maybeSingle();
-      if (billeteraChofer != null) {
-        final saldoActualChofer = double.tryParse(billeteraChofer['saldo'].toString()) ?? 0.0;
-        await supabase.from('billetera').update({'saldo': saldoActualChofer + costoPasaje}).eq('id_usuario', idChofer);
+      bool choferWalletActualizada = true;
+      try {
+        final billeteraChofer = await supabase
+            .from('billetera')
+            .select('saldo')
+            .eq('id_usuario', idChofer)
+            .maybeSingle();
+        if (billeteraChofer != null) {
+          final saldoActualChofer =
+              double.tryParse(billeteraChofer['saldo'].toString()) ?? 0.0;
+          await supabase
+              .from('billetera')
+              .update({'saldo': saldoActualChofer + costoPasaje}).eq(
+                  'id_usuario', idChofer);
+        } else {
+          await supabase.from('billetera').insert({
+            'id_usuario': idChofer,
+            'saldo': costoPasaje,
+          });
+        }
+      } catch (e) {
+        choferWalletActualizada = false;
+        debugPrint('No se pudo actualizar billetera del chofer: $e');
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Pasaje Pagado. ¡Notificación enviada al Chofer por 2.00 Bs!")),
+        SnackBar(
+          content: Text(choferWalletActualizada
+              ? '✅ Pasaje pagado: ${costoPasaje.toStringAsFixed(2)} Bs'
+              : '✅ Pasaje pagado: ${costoPasaje.toStringAsFixed(2)} Bs (saldo chofer no pudo actualizarse automáticamente)'),
+        ),
+      );
+      await NotificationService.instance.showNotification(
+        title: 'Pago exitoso',
+        body:
+            'Se descontaron ${costoPasaje.toStringAsFixed(2)} Bs de tu saldo.',
       );
       _cargarDatosCompletosPasajero();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error al cobrar pasaje: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error al cobrar pasaje: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _mostrarConfirmacionPago(String idChofer) async {
+    final costo = _calcularCostoPasaje();
+    if (!mounted) return;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar pago'),
+        content: Text(
+          'Vas a pagar ${costo.toStringAsFixed(2)} Bs al chofer con ID:\n$idChofer\n\nCategoría de pasajero: ${_categoriaPasajero.toUpperCase()}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado == true) {
+      await _procesarPagoPasaje(idChofer);
+    }
+  }
+
+  Future<void> _mostrarDetalleRuta(Map<String, dynamic> ruta) async {
+    final choferId = ruta['chofer_id'];
+    Map<String, dynamic>? chofer;
+
+    if (choferId != null) {
+      try {
+        chofer = await supabase
+            .from('choferes')
+            .select()
+            .eq('id', choferId)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Error al cargar datos del chofer: $e');
+      }
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(ruta['nombre_ruta'] ?? 'Detalle de la ruta'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                height: 140,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0257A2), Color(0xFF00214D)],
+                  ),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned(
+                      left: 22,
+                      right: 22,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.circle,
+                                  color: Colors.white, size: 12),
+                              const SizedBox(height: 6),
+                              Text(ruta['origen'] ?? 'Origen',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 12)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Icon(Icons.circle,
+                                  color: Colors.white, size: 12),
+                              const SizedBox(height: 6),
+                              Text(ruta['destino'] ?? 'Destino',
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 12)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        20,
+                        (index) => Expanded(
+                          child: Container(
+                            height: 2,
+                            color: index.isEven ? Colors.white24 : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text('Ruta: ${ruta['nombre_ruta'] ?? 'Sin nombre'}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('De: ${ruta['origen'] ?? 'N/A'}',
+                  style: const TextStyle(color: Colors.black87)),
+              Text('A: ${ruta['destino'] ?? 'N/A'}',
+                  style: const TextStyle(color: Colors.black87)),
+              const SizedBox(height: 16),
+              if (chofer != null) ...[
+                Text(
+                    'Chofer: ${chofer['nombre'] ?? chofer['nombre_chofer'] ?? choferId}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text('Estado: ${chofer['estado'] ?? 'Desconocido'}',
+                    style: const TextStyle(color: Colors.black87)),
+                const SizedBox(height: 6),
+                Text('Placa: ${chofer['placa_bus'] ?? 'No disponible'}',
+                    style: const TextStyle(color: Colors.black87)),
+              ] else ...[
+                const Text('Chofer: No disponible',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                const Text('No hay información del chofer asignado.',
+                    style: TextStyle(color: Colors.black87)),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _mostrarDialogoRecargaQR() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Recargar Billetera via QR", textAlign: TextAlign.center),
+        title: const Text('Recargar Billetera via QR',
+            textAlign: TextAlign.center),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Escanea o guarda este código para transferir saldo instantáneo a tu cuenta de TransPayy."),
+            const Text(
+                'Escanea o guarda este código para transferir saldo instantáneo a tu cuenta de TransPayy.'),
             const SizedBox(height: 15),
             Container(
               padding: const EdgeInsets.all(10),
@@ -145,69 +358,176 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            const Text("Monto de simulación fija: +10.00 Bs", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+            const Text('Monto de simulación fija: +10.00 Bs',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.green)),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             onPressed: () async {
               Navigator.pop(context);
               setState(() => _isLoading = true);
               try {
-                await supabase.from('billetera').update({'saldo': _saldoBilletera + 10.00}).eq('id_usuario', user.id);
+                await supabase
+                    .from('billetera')
+                    .update({'saldo': _saldoBilletera + 10.00}).eq(
+                        'id_usuario', user.id);
                 await supabase.from('transacciones').insert({
                   'pasajero_id': user.id,
                   'monto': 10.00,
                   'tipo': 'credito',
                   'estado': 'completado',
-                  'fecha': DateTime.now().toIso8601String()
+                  'fecha': DateTime.now().toIso8601String(),
                 });
+                await NotificationService.instance.showNotification(
+                  title: 'Recarga exitosa',
+                  body: 'Se agregaron 10.00 Bs a tu billetera.',
+                );
                 _cargarDatosCompletosPasajero();
               } catch (e) {
-                debugPrint("Error al recargar: $e");
+                debugPrint('Error al recargar: $e');
               }
             },
-            child: const Text("Simular Depósito"),
+            child: const Text('Simular Depósito'),
           ),
         ],
       ),
     );
   }
 
+  Future<void> _importarQRDesdeGaleria() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+      );
+      if (pickedFile == null) return;
+
+      final barcodeCapture =
+          await _scannerController.analyzeImage(pickedFile.path);
+      if (barcodeCapture == null || barcodeCapture.barcodes.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('No se encontró un QR válido en la imagen.')),
+        );
+        return;
+      }
+
+      final String? codigoEscaneado = barcodeCapture.barcodes.first.rawValue;
+      if (codigoEscaneado == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El QR no contiene datos válidos.')),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      _mostrarConfirmacionPago(codigoEscaneado);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al importar QR: $e')),
+      );
+    }
+  }
+
   void _abrirEscannerQR() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text("Escanea el QR del Bus"),
-            leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-          ),
-          body: MobileScanner(
-            onDetect: (capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-                final String codigoEscaneado = barcodes.first.rawValue!;
-                Navigator.pop(context);
-                _procesarPagoPasaje(codigoEscaneado);
-              }
-            },
-          ),
-        ),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
+      builder: (context) {
+        final mediaQuery = MediaQuery.of(context);
+        return SafeArea(
+          child: Container(
+            height: mediaQuery.size.height * 0.75,
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: mediaQuery.viewInsets.bottom + 16,
+            ),
+            decoration: BoxDecoration(
+              color: Theme.of(context).canvasColor,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Escanea el QR del Bus',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Importar QR desde galería'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: _importarQRDesdeGaleria,
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: MobileScanner(
+                      controller: _scannerController,
+                      onDetect: (capture) {
+                        final barcodes = capture.barcodes;
+                        if (barcodes.isNotEmpty &&
+                            barcodes.first.rawValue != null) {
+                          final String codigoEscaneado =
+                              barcodes.first.rawValue!;
+                          Navigator.pop(context);
+                          _mostrarConfirmacionPago(codigoEscaneado);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     if (_estadoPasajero == 'pendiente') {
       return Scaffold(
+        backgroundColor: const Color(0xFF081628),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(25.0),
@@ -216,11 +536,22 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const Icon(Icons.gpp_maybe, size: 90, color: Colors.orange),
                 const SizedBox(height: 15),
-                const Text("Cuenta en Revisión", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const Text('Cuenta en Revisión',
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
                 const SizedBox(height: 10),
-                const Text("Espera a que el administrador apruebe tu registro.", textAlign: TextAlign.center),
+                const Text('Espera a que el administrador apruebe tu registro.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70)),
                 const SizedBox(height: 25),
-                ElevatedButton(onPressed: _cargarDatosCompletosPasajero, child: const Text("Verificar ahora")),
+                ElevatedButton(
+                    onPressed: _cargarDatosCompletosPasajero,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF40E0FF)),
+                    child: const Text('Verificar ahora',
+                        style: TextStyle(color: Colors.black))),
               ],
             ),
           ),
@@ -229,203 +560,437 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: const Color(0xFF061128),
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("TransPayy Pasajero", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.blue.shade900,
+        title: const Text('TransPayy Pasajero',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         elevation: 0,
+        backgroundColor: Colors.transparent,
         actions: [
-          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _cargarDatosCompletosPasajero),
+          IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              onPressed: _cargarDatosCompletosPasajero),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               final navigator = Navigator.of(context);
               await supabase.auth.signOut();
-              navigator.pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+              navigator.pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()));
             },
           )
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.blue.shade900,
-                borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
-              ),
-              padding: const EdgeInsets.only(left: 20, right: 20, bottom: 25, top: 10),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 35,
-                        backgroundColor: Colors.white,
-                        child: CircleAvatar(
-                          radius: 32,
-                          backgroundColor: Colors.blue.shade200,
-                          backgroundImage: _fotoRostroUrl.isNotEmpty ? NetworkImage(_fotoRostroUrl) : null,
-                          child: _fotoRostroUrl.isEmpty ? const Icon(Icons.person, size: 35, color: Colors.white) : null,
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_nombreCompleto, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                            Text(_emailUsuario, style: TextStyle(color: Colors.blue.shade100, fontSize: 13)),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.teal.shade400, borderRadius: BorderRadius.circular(10)),
-                              child: Text(_categoriaPasajero, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                            )
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15), 
-                      borderRadius: BorderRadius.circular(15)
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text("SALDO DISPONIBLE", style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 3),
-                            Text("${_saldoBilletera.toStringAsFixed(2)} Bs", style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                          onPressed: _mostrarDialogoRecargaQR,
-                          icon: const Icon(Icons.qr_code, size: 18),
-                          label: const Text("Recargar", style: TextStyle(fontWeight: FontWeight.bold)),
-                        )
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.all(15.0),
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                child: InkWell(
-                  onTap: _abrirEscannerQR,
-                  borderRadius: BorderRadius.circular(15),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade900]),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    // CORREGIDO AQUÍ: Añadido 'const' al Row de forma global
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.qr_code_scanner, color: Colors.white, size: 36),
-                        SizedBox(width: 15),
-                        Text("ESCANEAR QR DE BUS / PAGAR", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
-                      ],
-                    ),
-                  ),
+      body: RefreshIndicator(
+        onRefresh: _cargarDatosCompletosPasajero,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                      colors: [Color(0xFF0257A2), Color(0xFF00214D)]),
+                  borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(32),
+                      bottomRight: Radius.circular(32)),
                 ),
-              ),
-            ),
-
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 5),
-              child: Align(alignment: Alignment.centerLeft, child: Text("🗺️ Rutas y Buses Disponibles", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87))),
-            ),
-            Container(
-              height: 120,
-              margin: const EdgeInsets.only(bottom: 10),
-              child: _rutasYBusenTurno.isEmpty
-                  ? const Center(child: Text("No hay rutas registradas en el sistema.", style: TextStyle(fontStyle: FontStyle.italic)))
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      itemCount: _rutasYBusenTurno.length,
-                      itemBuilder: (context, index) {
-                        final ruta = _rutasYBusenTurno[index];
-                        return Container(
-                          width: 240,
-                          margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
+                padding: const EdgeInsets.fromLTRB(22, 90, 22, 32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 32,
+                          backgroundColor: Colors.white24,
+                          backgroundImage: _fotoRostroUrl.isNotEmpty
+                              ? NetworkImage(_fotoRostroUrl)
+                              : null,
+                          child: _fotoRostroUrl.isEmpty
+                              ? const Icon(Icons.person,
+                                  size: 36, color: Colors.white)
+                              : null,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(ruta['nombre_ruta'] ?? 'Línea Desconocida', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.blue)),
-                              const SizedBox(height: 2),
-                              Text("De: ${ruta['origen']} a ${ruta['destino']}", style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
-                              const Divider(height: 12),
-                              Row(
-                                children: [
-                                  const Icon(Icons.directions_bus, size: 16, color: Colors.orange),
-                                  const SizedBox(width: 5),
-                                  Text("Bus Placa: ${ruta['bus_placa'] ?? 'Sin asignar'}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                ],
-                              )
+                              Text('Bienvenido,',
+                                  style: TextStyle(
+                                      color: Colors.white.withOpacity(0.75),
+                                      fontSize: 14)),
+                              const SizedBox(height: 6),
+                              Text(_nombreCompleto,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Text(_emailUsuario,
+                                  style: const TextStyle(
+                                      color: Colors.white70, fontSize: 13)),
                             ],
                           ),
-                        );
-                      },
-                    ),
-            ),
-
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 5),
-              child: Align(alignment: Alignment.centerLeft, child: Text("📊 Historial de Transacciones", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87))),
-            ),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)]),
-              child: _historialViajes.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(25.0),
-                      child: Center(child: Text("Aún no tienes movimientos en tu cuenta.", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey))),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _historialViajes.length,
-                      itemBuilder: (context, index) {
-                        final tx = _historialViajes[index];
-                        final bool esDebito = tx['tipo'] == 'debito';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: esDebito ? Colors.red.shade50 : Colors.green.shade50,
-                            child: Icon(esDebito ? Icons.local_atm : Icons.account_balance_wallet, color: esDebito ? Colors.red : Colors.green),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          title: Text(esDebito ? "Pago de Pasaje Bus" : "Recarga de Saldo QR"),
-                          subtitle: Text(tx['estado']?.toString().toUpperCase() ?? 'COMPLETADO', style: const TextStyle(fontSize: 11)),
-                          trailing: Text(
-                            "${esDebito ? '-' : '+'} ${tx['monto']} Bs",
-                            style: TextStyle(color: esDebito ? Colors.red : Colors.green, fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        );
-                      },
+                          child: Text(_categoriaPasajero.toUpperCase(),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ),
+                      ],
                     ),
-            ),
-            const SizedBox(height: 25),
-          ],
+                    const SizedBox(height: 24),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Saldo Disponible',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text('${_saldoBilletera.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 42,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 6),
+                              const Text('Bs',
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 18)),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.cyanAccent.shade400,
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                            ),
+                            icon: const Icon(Icons.qr_code),
+                            label: const Text('Recargar',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: _mostrarDialogoRecargaQR,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF9F00),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18)),
+                        ),
+                        icon: const Icon(Icons.qr_code_scanner, size: 24),
+                        label: const Text('ESCANEAR QR DE BUS / PAGAR',
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold)),
+                        onPressed: _abrirEscannerQR,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Rutas y Choferes Disponibles',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_rutasYBusenTurno.isEmpty)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Text(
+                            'No hay rutas disponibles.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _rutasYBusenTurno.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final ruta = _rutasYBusenTurno[index];
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            ruta['nombre_ruta'] ??
+                                                'Ruta sin nombre',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '🚌 ${ruta['bus_placa'] ?? 'Sin placa'}',
+                                            style: const TextStyle(
+                                              color: Colors.cyanAccent,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.location_on,
+                                            size: 14,
+                                            color: Colors.white70,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              ruta['origen'] ?? 'Origen',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.location_on,
+                                            size: 14,
+                                            color: Colors.white70,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              ruta['destino'] ?? 'Destino',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF40E0FF),
+                                      foregroundColor: Colors.black,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                    icon:
+                                        const Icon(Icons.visibility, size: 18),
+                                    label: const Text(
+                                      'Ver Chofer',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    onPressed: () => _mostrarDetalleRuta(ruta),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                    const Text('Historial de viajes',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Builder(builder: (context) {
+                      final viajes = _historialViajes
+                          .where(_esViaje)
+                          .toList(growable: false);
+                      return viajes.isEmpty
+                          ? const Text('No tienes viajes registrados aún.',
+                              style: TextStyle(color: Colors.white70))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: viajes.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = viajes[index];
+                                return Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white12,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                          'Monto: ${item['monto'] ?? '0.00'} Bs',
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 6),
+                                      Text('Fecha: ${item['fecha'] ?? '-'}',
+                                          style: const TextStyle(
+                                              color: Colors.white70)),
+                                      const SizedBox(height: 6),
+                                      Text('Estado: ${item['estado'] ?? '-'}',
+                                          style: const TextStyle(
+                                              color: Colors.white70)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                    }),
+                    const SizedBox(height: 24),
+                    const Text('Historial de recargas',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Builder(builder: (context) {
+                      final recargas = _historialViajes
+                          .where(_esRecarga)
+                          .toList(growable: false);
+                      return recargas.isEmpty
+                          ? const Text('No tienes recargas registradas aún.',
+                              style: TextStyle(color: Colors.white70))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: recargas.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = recargas[index];
+                                return Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white12,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                          'Monto: +${item['monto'] ?? '0.00'} Bs',
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 6),
+                                      Text('Fecha: ${item['fecha'] ?? '-'}',
+                                          style: const TextStyle(
+                                              color: Colors.white70)),
+                                      const SizedBox(height: 6),
+                                      Text('Estado: ${item['estado'] ?? '-'}',
+                                          style: const TextStyle(
+                                              color: Colors.white70)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                    }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );

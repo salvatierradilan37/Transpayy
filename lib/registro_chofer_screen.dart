@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -42,31 +42,35 @@ class _RegistroChoferScreenState extends State<RegistroChoferScreen> {
   }
 
   Future<void> _registrarChofer() async {
-    // Validar que todas las fotos estén presentes
-    if (_fotoRostro == null || _fotoLicencia == null || _fotoCarnet == null || _fotoBus == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Por favor, sube todas las fotos requeridas")));
+    if (_fotoRostro == null ||
+        _fotoLicencia == null ||
+        _fotoCarnet == null ||
+        _fotoBus == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Por favor, sube todas las fotos requeridas')));
       return;
     }
 
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Procesando solicitud...'),
+      duration: Duration(seconds: 10),
+    ));
     setState(() => _isLoading = true);
     try {
       final supabase = Supabase.instance.client;
 
-      // 1. Registro Auth
       final auth = await supabase.auth.signUp(
-        email: "${_emailController.text.trim()}@transpayy.com",
+        email: '${_emailController.text.trim()}@transpayy.com',
         password: _passController.text.trim(),
       );
 
-      if (auth.user == null) throw Exception("Error al crear cuenta");
+      if (auth.user == null) throw Exception('Error al crear cuenta');
 
-      // 2. Subida de imágenes
-      String urlRostro = await _subirFoto(_fotoRostro!, 'rostros') ?? '';
-      String urlLicencia = await _subirFoto(_fotoLicencia!, 'licencias') ?? '';
-      String urlCarnet = await _subirFoto(_fotoCarnet!, 'carnets') ?? '';
-      String urlBus = await _subirFoto(_fotoBus!, 'buses') ?? '';
+      final urlRostro = await _subirFoto(_fotoRostro!, 'rostros');
+      final urlLicencia = await _subirFoto(_fotoLicencia!, 'licencias');
+      final urlCarnet = await _subirFoto(_fotoCarnet!, 'carnets');
+      final urlBus = await _subirFoto(_fotoBus!, 'buses');
 
-      // 3. Guardar en BD
       await supabase.from('choferes').insert({
         'id': auth.user!.id,
         'nombre_completo': _nombreController.text.trim(),
@@ -80,10 +84,11 @@ class _RegistroChoferScreenState extends State<RegistroChoferScreen> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context); // Regresa al login
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -92,27 +97,173 @@ class _RegistroChoferScreenState extends State<RegistroChoferScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Registro Chofer")),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Usuario (ID)")),
-          TextField(controller: _passController, decoration: const InputDecoration(labelText: "Contraseña"), obscureText: true),
-          TextField(controller: _nombreController, decoration: const InputDecoration(labelText: "Nombre Completo")),
-          TextField(controller: _carnetController, decoration: const InputDecoration(labelText: "Número de Carnet")),
-          TextField(controller: _placaController, decoration: const InputDecoration(labelText: "Placa del Bus")),
-          const SizedBox(height: 20),
-          const Text("Subir Documentos:", style: TextStyle(fontWeight: FontWeight.bold)),
-          ListTile(title: const Text("Foto de rostro"), leading: const Icon(Icons.camera_alt), onTap: () => _pickImage('rostro'), tileColor: _fotoRostro != null ? Colors.green.shade50 : null),
-          ListTile(title: const Text("Foto de licencia"), leading: const Icon(Icons.camera_alt), onTap: () => _pickImage('licencia'), tileColor: _fotoLicencia != null ? Colors.green.shade50 : null),
-          ListTile(title: const Text("Foto de carnet"), leading: const Icon(Icons.camera_alt), onTap: () => _pickImage('carnet'), tileColor: _fotoCarnet != null ? Colors.green.shade50 : null),
-          ListTile(title: const Text("Foto del bus"), leading: const Icon(Icons.directions_bus), onTap: () => _pickImage('bus'), tileColor: _fotoBus != null ? Colors.green.shade50 : null),
-          const SizedBox(height: 20),
-          _isLoading 
-            ? const Center(child: CircularProgressIndicator()) 
-            : ElevatedButton(onPressed: _registrarChofer, child: const Text("Finalizar Registro"))
-        ],
+      backgroundColor: const Color(0xFF061228),
+      appBar: AppBar(
+        title: const Text('Registro Chofer'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                    colors: [Color(0xFF0257A2), Color(0xFF001F44)]),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text('Registro Chofer',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text(
+                      'Carga tus datos y documentos para comenzar a recibir pagos.',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                  color: Colors.white12,
+                  borderRadius: BorderRadius.circular(28)),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _emailController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Usuario',
+                      hintText: 'ejemplo',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _passController,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _nombreController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Nombre completo',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _carnetController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Número de carnet',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _placaController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Placa del bus',
+                      labelStyle: const TextStyle(color: Colors.white70),
+                      filled: true,
+                      fillColor: Colors.white10,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _buildUploadTile('Foto de rostro', _fotoRostro != null,
+                      () => _pickImage('rostro')),
+                  const SizedBox(height: 10),
+                  _buildUploadTile('Foto de licencia', _fotoLicencia != null,
+                      () => _pickImage('licencia')),
+                  const SizedBox(height: 10),
+                  _buildUploadTile('Foto de carnet', _fotoCarnet != null,
+                      () => _pickImage('carnet')),
+                  const SizedBox(height: 10),
+                  _buildUploadTile('Foto del bus', _fotoBus != null,
+                      () => _pickImage('bus')),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF40E0FF),
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18)),
+                      ),
+                      onPressed: _isLoading ? null : _registrarChofer,
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.black)
+                          : const Text('Finalizar Registro',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  if (_isLoading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 14),
+                      child: Text('Procesando solicitud...',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 14)),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUploadTile(String label, bool active, VoidCallback onTap) {
+    return ListTile(
+      onTap: onTap,
+      tileColor: active ? Colors.green.withOpacity(0.16) : Colors.white10,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      leading: const Icon(Icons.camera_alt, color: Colors.white70),
+      title: Text(label, style: const TextStyle(color: Colors.white)),
+      trailing: Icon(active ? Icons.check_circle : Icons.add_circle_outline,
+          color: active ? Colors.greenAccent : Colors.white70),
     );
   }
 }

@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'chofer_dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
-import 'register_pasajero_screen.dart'; 
+import 'register_pasajero_screen.dart';
 import 'registro_chofer_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Por favor, llena todos los campos.")),
+        const SnackBar(content: Text('⚠️ Por favor, llena todos los campos.')),
       );
       return;
     }
@@ -40,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!email.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("⚠️ Ingresa un correo electrónico válido (ej: usuario@gmail.com)."),
+          content: Text('⚠️ Ingresa un correo electrónico válido (ej: usuario@gmail.com).'),
           backgroundColor: Colors.amber,
         ),
       );
@@ -56,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (response.user == null) {
-        throw Exception("No se pudo obtener el usuario.");
+        throw Exception('No se pudo obtener el usuario.');
       }
 
       final uid = response.user!.id;
@@ -91,12 +91,11 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
-
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("❌ Credenciales incorrectas."),
+          content: Text('❌ Credenciales incorrectas.'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -108,85 +107,158 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue.shade900,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(25.0),
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF06192D), Color(0xFF0C4F8F)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.directions_bus, size: 70, color: Colors.blue),
+                  const Icon(Icons.directions_bus_rounded, size: 72, color: Color(0xFF57EAFF)),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'TransPayy',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                   const SizedBox(height: 10),
-                  const Text("TransPayy", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  const Text("Inicia sesión para continuar", style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 25),
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: "Correo Electrónico",
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(),
-                    ),
+                  const Text(
+                    'Inicia sesión y gestiona tu viaje con un dashboard premium.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: "Contraseña",
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 25),
-                  _isLoading
-                      ? const CircularProgressIndicator()
-                      : SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade900,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(height: 32),
+                  Card(
+                    elevation: 14,
+                    color: Colors.white.withOpacity(0.12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(22.0),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Correo Electrónico',
+                              labelStyle: const TextStyle(color: Colors.white70),
+                              prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
-                            onPressed: _iniciarSesion,
-                            child: const Text("INGRESAR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ),
-                        ),
-                  const SizedBox(height: 20),
-                  const Divider(),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña',
+                              labelStyle: const TextStyle(color: Colors.white70),
+                              prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF40E0FF),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              onPressed: _isLoading ? null : _iniciarSesion,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 22,
+                                      width: 22,
+                                      child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
+                                    )
+                                  : const Text('INGRESAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  const Text('REGISTRO', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.4)),
+                  const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("¿No tienes cuenta?"),
-                      TextButton(
-                        onPressed: () {
-                          // REVISA EL NOMBRE DE LA CLASE AQUÍ:
-                          // He usado 'RegistroPasajeroScreen'. Si tu archivo tiene otro nombre, cámbialo aquí.
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const RegistroPasajeroScreen()),
-                          );
-                        },
-                        child: const Text("Regístrate aquí"),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.12),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          icon: const Icon(Icons.person_add),
+                          label: const Text('Pasajero'),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const RegistroPasajeroScreen()),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.12),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          icon: const Icon(Icons.drive_eta),
+                          label: const Text('Chofer'),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const RegistroChoferScreen()),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RegistroChoferScreen()),
-                      );
-                    },
-                    child: const Text("¿Eres Chofer? Regístrate aquí", style: TextStyle(color: Colors.teal)),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('¿Ya tienes cuenta?', style: TextStyle(color: Colors.white70)),
+                      TextButton(
+                        onPressed: () {},
+                        child: const Text('Inicia sesión', style: TextStyle(color: Color(0xFF57EAFF))),
+                      ),
+                    ],
                   ),
                 ],
               ),
