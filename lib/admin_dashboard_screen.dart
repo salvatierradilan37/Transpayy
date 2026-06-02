@@ -35,6 +35,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   String _filtroTransacciones = 'todos';
   String _busquedaTransacciones = '';
 
+  List<dynamic> _choferesFiltrados = [];
+  String _filtroChoferes = 'todos';
+  String _busquedaChoferes = '';
+  
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +64,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         _solicitudesChoferes = choferesRes as List;
         _solicitudesPasajeros = pasajerosRes as List;
         _rutasDisponibles = rutasRes as List;
+        _filtrarChoferes();
       });
     } catch (e) {
       if (!mounted) return;
@@ -161,6 +167,52 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         return cumpleFiltro && cumpleBusqueda;
       }).toList();
     });
+  }
+
+  Future<void> _cargarChoferes() async {
+    try {
+      final res = await supabase.from('choferes').select();
+      setState(() {
+        _solicitudesChoferes = res as List;
+        _filtrarChoferes();
+      });
+    } catch (e) {
+      debugPrint('Error al cargar choferes: $e');
+    }
+  }
+
+  void _filtrarChoferes() {
+    setState(() {
+      _choferesFiltrados = _solicitudesChoferes.where((c) {
+        final cumpleFiltro = _filtroChoferes == 'todos' ||
+            c['estado'] == _filtroChoferes;
+        final cumpleBusqueda = _busquedaChoferes.isEmpty ||
+            (c['nombre']?.toString().toLowerCase().contains(
+                  _busquedaChoferes.toLowerCase(),
+                ) ??
+                false) ||
+            (c['email']?.toString().toLowerCase().contains(
+                  _busquedaChoferes.toLowerCase(),
+                ) ??
+                false);
+        return cumpleFiltro && cumpleBusqueda;
+      }).toList();
+    });
+  }
+
+  Future<void> _cambiarEstadoChofer(String id, String nuevoEstado) async {
+    try {
+      await supabase.from('choferes').update({'estado': nuevoEstado}).eq('id', id);
+      await _cargarChoferes();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chofer $nuevoEstado con éxito')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   Future<void> _crearNuevaRuta() async {
@@ -1015,8 +1067,221 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                 ),
                 // Tab 5: Reportes
                 const Center(child: Text('Tab 5 - Reportes', style: TextStyle(color: Colors.white70))),
-                // Tab 6: Choferes
-                const Center(child: Text('Tab 6 - Choferes', style: TextStyle(color: Colors.white70))),
+                // Tab 6: Gestionar Choferes
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              onChanged: (value) {
+                                _busquedaChoferes = value;
+                                _filtrarChoferes();
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'Buscar por nombre o email...',
+                                prefixIcon: const Icon(Icons.search),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          DropdownButton<String>(
+                            value: _filtroChoferes,
+                            items: const [
+                              DropdownMenuItem(value: 'todos', child: Text('Todos')),
+                              DropdownMenuItem(value: 'aprobado', child: Text('Aprobados')),
+                              DropdownMenuItem(value: 'pendiente', child: Text('Pendientes')),
+                              DropdownMenuItem(value: 'rechazado', child: Text('Rechazados')),
+                              DropdownMenuItem(value: 'suspendido', child: Text('Suspendidos')),
+                            ],
+                            onChanged: (value) {
+                              _filtroChoferes = value ?? 'todos';
+                              _filtrarChoferes();
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      if (_choferesFiltrados.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No hay choferes',
+                                style: TextStyle(color: Colors.white70)),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _choferesFiltrados.length,
+                          itemBuilder: (context, index) {
+                            final chofer = _choferesFiltrados[index];
+                            final estado = chofer['estado'] ?? 'pendiente';
+                            final colorEstado = estado == 'aprobado'
+                                ? Colors.greenAccent
+                                : estado == 'rechazado'
+                                    ? Colors.redAccent
+                                    : estado == 'suspendido'
+                                        ? Colors.orangeAccent
+                                        : Colors.yellowAccent;
+                            
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white12,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              chofer['nombre'] ?? 'Sin nombre',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              chofer['email'] ?? 'Sin email',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Tel: ${chofer['telefono'] ?? 'N/A'}',
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: colorEstado.withValues(alpha: 0.2),
+                                              border: Border.all(color: colorEstado),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              estado.toUpperCase(),
+                                              style: TextStyle(
+                                                color: colorEstado,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      if (estado != 'aprobado')
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.greenAccent,
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                            ),
+                                            onPressed: () =>
+                                                _cambiarEstadoChofer(chofer['id'], 'aprobado'),
+                                            child: const Text(
+                                              'Aprobar',
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      if (estado != 'aprobado')
+                                        const SizedBox(width: 8),
+                                      if (estado == 'aprobado')
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.orangeAccent,
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 8,
+                                              ),
+                                            ),
+                                            onPressed: () =>
+                                                _cambiarEstadoChofer(chofer['id'], 'suspendido'),
+                                            child: const Text(
+                                              'Suspender',
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      if (estado == 'aprobado')
+                                        const SizedBox(width: 8),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                          ),
+                                          onPressed: () =>
+                                              _cambiarEstadoChofer(chofer['id'], 'rechazado'),
+                                          child: const Text(
+                                            'Rechazar',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      const SizedBox(height: 90),
+                    ],
+                  ),
+                ),
                 // Tab 7: Notificaciones
                 const Center(child: Text('Tab 7 - Notificaciones', style: TextStyle(color: Colors.white70))),
                 // Tab 8: Bloqueos
@@ -1061,4 +1326,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 }
+
+
 
