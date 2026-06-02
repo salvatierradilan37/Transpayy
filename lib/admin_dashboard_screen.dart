@@ -50,9 +50,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   Future<void> _cargarDatosAdmin() async {
     setState(() => _isLoading = true);
     try {
-      final choferesRes = await supabase.from('choferes').select();
-      final pasajerosRes = await supabase.from('pasajeros').select();
-      final rutasRes = await supabase.from('rutas').select();
+      // Cargar con límites para evitar sobrecarga
+      final choferesRes = await supabase.from('choferes').select().limit(100);
+      final pasajerosRes = await supabase.from('pasajeros').select().limit(100);
+      final rutasRes = await supabase.from('rutas').select().limit(100);
 
       await _cargarEstadisticas();
 
@@ -103,7 +104,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _cargarEstadisticas() async {
     try {
-      final transaccionesRes = await supabase.from('transacciones').select();
+      // Cargar con límite
+      final transaccionesRes = await supabase.from('transacciones').select().limit(500);
       final transacciones = transaccionesRes as List;
 
       _totalViajes = transacciones
@@ -117,10 +119,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   sum + (double.tryParse(t['monto'].toString()) ?? 0.0));
 
       final choferesActivos =
-          await supabase.from('choferes').select().eq('estado', 'aprobado');
+          await supabase.from('choferes').select().eq('estado', 'aprobado').limit(100);
 
       final pasajerosActivos =
-          await supabase.from('pasajeros').select().eq('estado', 'aprobado');
+          await supabase.from('pasajeros').select().eq('estado', 'aprobado').limit(100);
 
       _usuariosActivos =
           (choferesActivos as List).length + (pasajerosActivos as List).length;
@@ -144,7 +146,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _cargarTransacciones() async {
     try {
-      final res = await supabase.from('transacciones').select();
+      final res = await supabase.from('transacciones').select().limit(500);
       setState(() {
         _transacciones = res as List;
         _filtrarTransacciones();
@@ -171,7 +173,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
 
   Future<void> _cargarChoferes() async {
     try {
-      final res = await supabase.from('choferes').select();
+      final res = await supabase.from('choferes').select().limit(100);
       setState(() {
         _solicitudesChoferes = res as List;
         _filtrarChoferes();
