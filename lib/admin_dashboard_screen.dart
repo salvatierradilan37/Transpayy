@@ -28,12 +28,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   int _totalViajes = 0;
   double _ingresosTotales = 0.0;
   int _usuariosActivos = 0;
-  String _rutaMasUtilizada = 'N/A';
+    String _rutaMasUtilizada = 'N/A';
+
+  List<dynamic> _transacciones = [];
+  List<dynamic> _transaccionesFiltradas = [];
+  String _filtroTransacciones = 'todos';
+  String _busquedaTransacciones = '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _cargarDatosAdmin();
   }
 
@@ -45,6 +50,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       final rutasRes = await supabase.from('rutas').select();
 
       await _cargarEstadisticas();
+
+      await _cargarTransacciones();
 
       if (!mounted) return;
 
@@ -127,6 +134,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     } catch (e) {
       debugPrint('Error al cargar estadísticas: $e');
     }
+  }
+
+  Future<void> _cargarTransacciones() async {
+    try {
+      final res = await supabase.from('transacciones').select();
+      setState(() {
+        _transacciones = res as List;
+        _filtrarTransacciones();
+      });
+    } catch (e) {
+      debugPrint('Error al cargar transacciones: $e');
+    }
+  }
+
+  void _filtrarTransacciones() {
+    setState(() {
+      _transaccionesFiltradas = _transacciones.where((t) {
+        final cumpleFiltro = _filtroTransacciones == 'todos' ||
+            t['tipo'] == _filtroTransacciones;
+        final cumpleBusqueda = _busquedaTransacciones.isEmpty ||
+            (t['ruta_id']?.toString().toLowerCase().contains(
+                  _busquedaTransacciones.toLowerCase(),
+                ) ??
+                false);
+        return cumpleFiltro && cumpleBusqueda;
+      }).toList();
+    });
   }
 
   Future<void> _crearNuevaRuta() async {
@@ -872,6 +906,121 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                     ],
                   ),
                 ),
+                // Tab 4: Transacciones
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              onChanged: (value) {
+                                _busquedaTransacciones = value;
+                                _filtrarTransacciones();
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'Buscar por ruta...',
+                                prefixIcon: const Icon(Icons.search),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          DropdownButton<String>(
+                            value: _filtroTransacciones,
+                            items: const [
+                              DropdownMenuItem(value: 'todos', child: Text('Todos')),
+                              DropdownMenuItem(value: 'pago', child: Text('Pagos')),
+                              DropdownMenuItem(value: 'debito', child: Text('Débitos')),
+                            ],
+                            onChanged: (value) {
+                              _filtroTransacciones = value ?? 'todos';
+                              _filtrarTransacciones();
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      if (_transaccionesFiltradas.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text('No hay transacciones',
+                                style: TextStyle(color: Colors.white70)),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _transaccionesFiltradas.length,
+                          itemBuilder: (context, index) {
+                            final t = _transaccionesFiltradas[index];
+                            final esPago = t['tipo'] == 'pago';
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white12,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('ID: ${t['id'].toString().substring(0, 8)}...',
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text('Ruta: ${t['ruta_id']?.toString() ?? 'N/A'}',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                        ),
+                                        Text('Tipo: ${esPago ? 'Pago' : 'Débito'}',
+                                          style: TextStyle(color: esPago ? Colors.greenAccent : Colors.redAccent, fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text('${t['monto'] ?? '0'} Bs',
+                                        style: TextStyle(
+                                          color: esPago ? Colors.greenAccent : Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(t['created_at']?.toString().split('T')[0] ?? 'N/A',
+                                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      const SizedBox(height: 90),
+                    ],
+                  ),
+                ),
+                // Tab 5: Reportes
+                const Center(child: Text('Tab 5 - Reportes', style: TextStyle(color: Colors.white70))),
+                // Tab 6: Choferes
+                const Center(child: Text('Tab 6 - Choferes', style: TextStyle(color: Colors.white70))),
+                // Tab 7: Notificaciones
+                const Center(child: Text('Tab 7 - Notificaciones', style: TextStyle(color: Colors.white70))),
+                // Tab 8: Bloqueos
+                const Center(child: Text('Tab 8 - Bloqueos', style: TextStyle(color: Colors.white70))),
               ],
             ),
     );
@@ -912,3 +1061,4 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 }
+
