@@ -28,49 +28,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   int _totalViajes = 0;
   double _ingresosTotales = 0.0;
   int _usuariosActivos = 0;
-    String _rutaMasUtilizada = 'N/A';
-
-  List<dynamic> _transacciones = [];
-  List<dynamic> _transaccionesFiltradas = [];
-  String _filtroTransacciones = 'todos';
-  String _busquedaTransacciones = '';
-
-  List<dynamic> _choferesFiltrados = [];
-  String _filtroChoferes = 'todos';
-  String _busquedaChoferes = '';
-  
+  String _rutaMasUtilizada = 'N/A';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _cargarDatosAdmin();
   }
 
   Future<void> _cargarDatosAdmin() async {
     setState(() => _isLoading = true);
     try {
-      // Cargar con límites para evitar sobrecarga
-      final choferesRes = await supabase.from('choferes').select().limit(100);
-      final pasajerosRes = await supabase.from('pasajeros').select().limit(100);
-      final rutasRes = await supabase.from('rutas').select().limit(100);
+      debugPrint('Iniciando carga de datos admin...');
 
-      await _cargarEstadisticas();
-
-      await _cargarTransacciones();
+      // Ejecutar todas en paralelo
+      final results = await Future.wait([
+        supabase.from('choferes').select().limit(50),
+        supabase.from('pasajeros').select().limit(50),
+        supabase.from('rutas').select().limit(50),
+      ]);
 
       if (!mounted) return;
 
       setState(() {
-        _solicitudesChoferes = choferesRes as List;
-        _solicitudesPasajeros = pasajerosRes as List;
-        _rutasDisponibles = rutasRes as List;
-        _filtrarChoferes();
+        _solicitudesChoferes = results[0] as List;
+        _solicitudesPasajeros = results[1] as List;
+        _rutasDisponibles = results[2] as List;
       });
+
+      debugPrint('Datos básicos cargados - Admin listo');
+      // NO cargar estadísticas por ahora
     } catch (e) {
+      debugPrint('ERROR CRÍTICO al cargar datos: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error al cargar datos: $e')));
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -99,121 +92,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Error al cambiar estado: $e')));
-    }
-  }
-
-  Future<void> _cargarEstadisticas() async {
-    try {
-      // Cargar con límite
-      final transaccionesRes = await supabase.from('transacciones').select().limit(500);
-      final transacciones = transaccionesRes as List;
-
-      _totalViajes = transacciones
-          .where((t) => t['tipo'] == 'debito' || t['tipo'] == 'pago')
-          .length;
-      _ingresosTotales = transacciones
-          .where((t) => t['tipo'] == 'debito' || t['tipo'] == 'pago')
-          .fold(
-              0.0,
-              (sum, t) =>
-                  sum + (double.tryParse(t['monto'].toString()) ?? 0.0));
-
-      final choferesActivos =
-          await supabase.from('choferes').select().eq('estado', 'aprobado').limit(100);
-
-      final pasajerosActivos =
-          await supabase.from('pasajeros').select().eq('estado', 'aprobado').limit(100);
-
-      _usuariosActivos =
-          (choferesActivos as List).length + (pasajerosActivos as List).length;
-
-      if (transacciones.isNotEmpty) {
-        final rutasConteo = <String, int>{};
-        for (var t in transacciones) {
-          final rutaId = t['ruta_id']?.toString() ?? 'desconocida';
-          rutasConteo[rutaId] = (rutasConteo[rutaId] ?? 0) + 1;
-        }
-        if (rutasConteo.isNotEmpty) {
-          _rutaMasUtilizada = rutasConteo.entries
-              .reduce((a, b) => a.value > b.value ? a : b)
-              .key;
-        }
-      }
-    } catch (e) {
-      debugPrint('Error al cargar estadísticas: $e');
-    }
-  }
-
-  Future<void> _cargarTransacciones() async {
-    try {
-      final res = await supabase.from('transacciones').select().limit(500);
-      setState(() {
-        _transacciones = res as List;
-        _filtrarTransacciones();
-      });
-    } catch (e) {
-      debugPrint('Error al cargar transacciones: $e');
-    }
-  }
-
-  void _filtrarTransacciones() {
-    setState(() {
-      _transaccionesFiltradas = _transacciones.where((t) {
-        final cumpleFiltro = _filtroTransacciones == 'todos' ||
-            t['tipo'] == _filtroTransacciones;
-        final cumpleBusqueda = _busquedaTransacciones.isEmpty ||
-            (t['ruta_id']?.toString().toLowerCase().contains(
-                  _busquedaTransacciones.toLowerCase(),
-                ) ??
-                false);
-        return cumpleFiltro && cumpleBusqueda;
-      }).toList();
-    });
-  }
-
-  Future<void> _cargarChoferes() async {
-    try {
-      final res = await supabase.from('choferes').select().limit(100);
-      setState(() {
-        _solicitudesChoferes = res as List;
-        _filtrarChoferes();
-      });
-    } catch (e) {
-      debugPrint('Error al cargar choferes: $e');
-    }
-  }
-
-  void _filtrarChoferes() {
-    setState(() {
-      _choferesFiltrados = _solicitudesChoferes.where((c) {
-        final cumpleFiltro = _filtroChoferes == 'todos' ||
-            c['estado'] == _filtroChoferes;
-        final cumpleBusqueda = _busquedaChoferes.isEmpty ||
-            (c['nombre']?.toString().toLowerCase().contains(
-                  _busquedaChoferes.toLowerCase(),
-                ) ??
-                false) ||
-            (c['email']?.toString().toLowerCase().contains(
-                  _busquedaChoferes.toLowerCase(),
-                ) ??
-                false);
-        return cumpleFiltro && cumpleBusqueda;
-      }).toList();
-    });
-  }
-
-  Future<void> _cambiarEstadoChofer(String id, String nuevoEstado) async {
-    try {
-      await supabase.from('choferes').update({'estado': nuevoEstado}).eq('id', id);
-      await _cargarChoferes();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chofer $nuevoEstado con éxito')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -458,34 +336,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 
-  Widget _buildDocumentPreview(String label, String? imageUrl,
-      {double height = 120}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.network(
-            imageUrl ?? 'https://via.placeholder.com/300x200',
-            height: height,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              height: height,
-              color: Colors.white10,
-              child: const Center(
-                child:
-                    Icon(Icons.broken_image, color: Colors.white60, size: 40),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildVerificationCheckbox(
       String label, bool value, ValueChanged<bool?> onChanged) {
     return CheckboxListTile(
@@ -526,27 +376,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         fontSize: 14)),
                 const SizedBox(height: 10),
                 if (esChofer) ...[
-                  _buildDocumentPreview(
-                      'Foto de rostro', usuario['foto_rostro_url']),
-                  const SizedBox(height: 12),
-                  _buildDocumentPreview(
-                      'Foto de licencia', usuario['foto_licencia_url']),
-                  const SizedBox(height: 12),
-                  _buildDocumentPreview(
-                      'Foto de carnet', usuario['foto_carnet_url']),
-                  const SizedBox(height: 12),
-                  _buildDocumentPreview(
-                      'Foto del bus', usuario['foto_bus_url']),
+                  Text(
+                      'Foto de rostro: ${usuario['foto_rostro_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Text(
+                      'Foto de licencia: ${usuario['foto_licencia_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Text(
+                      'Foto de carnet: ${usuario['foto_carnet_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Text(
+                      'Foto del bus: ${usuario['foto_bus_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
                 ] else ...[
-                  _buildDocumentPreview(
-                      'Foto de rostro', usuario['foto_rostro_url']),
-                  const SizedBox(height: 12),
-                  _buildDocumentPreview(
-                      'Foto de carnet', usuario['foto_carnet_url']),
+                  Text(
+                      'Foto de rostro: ${usuario['foto_rostro_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Text(
+                      'Foto de carnet: ${usuario['foto_carnet_url'] ?? 'No disponible'}',
+                      style: const TextStyle(color: Colors.white70)),
                   if (usuario['categoria'] == 'estudiante') ...[
-                    const SizedBox(height: 12),
-                    _buildDocumentPreview('Foto de carnet estudiantil',
-                        usuario['foto_universitario_url']),
+                    const SizedBox(height: 8),
+                    Text(
+                        'Foto de carnet estudiantil: ${usuario['foto_universitario_url'] ?? 'No disponible'}',
+                        style: const TextStyle(color: Colors.white70)),
                   ],
                 ],
                 const SizedBox(height: 18),
@@ -961,333 +818,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                   ),
                 ),
                 // Tab 4: Transacciones
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              onChanged: (value) {
-                                _busquedaTransacciones = value;
-                                _filtrarTransacciones();
-                              },
-                              decoration: InputDecoration(
-                                hintText: 'Buscar por ruta...',
-                                prefixIcon: const Icon(Icons.search),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          DropdownButton<String>(
-                            value: _filtroTransacciones,
-                            items: const [
-                              DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                              DropdownMenuItem(value: 'pago', child: Text('Pagos')),
-                              DropdownMenuItem(value: 'debito', child: Text('Débitos')),
-                            ],
-                            onChanged: (value) {
-                              _filtroTransacciones = value ?? 'todos';
-                              _filtrarTransacciones();
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      if (_transaccionesFiltradas.isEmpty)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text('No hay transacciones',
-                                style: TextStyle(color: Colors.white70)),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _transaccionesFiltradas.length,
-                          itemBuilder: (context, index) {
-                            final t = _transaccionesFiltradas[index];
-                            final esPago = t['tipo'] == 'pago';
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('ID: ${t['id'].toString().substring(0, 8)}...',
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text('Ruta: ${t['ruta_id']?.toString() ?? 'N/A'}',
-                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                        ),
-                                        Text('Tipo: ${esPago ? 'Pago' : 'Débito'}',
-                                          style: TextStyle(color: esPago ? Colors.greenAccent : Colors.redAccent, fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text('${t['monto'] ?? '0'} Bs',
-                                        style: TextStyle(
-                                          color: esPago ? Colors.greenAccent : Colors.redAccent,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(t['created_at']?.toString().split('T')[0] ?? 'N/A',
-                                        style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 90),
-                    ],
-                  ),
-                ),
-                // Tab 5: Reportes
-                const Center(child: Text('Tab 5 - Reportes', style: TextStyle(color: Colors.white70))),
-                // Tab 6: Gestionar Choferes
-                SingleChildScrollView(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              onChanged: (value) {
-                                _busquedaChoferes = value;
-                                _filtrarChoferes();
-                              },
-                              decoration: InputDecoration(
-                                hintText: 'Buscar por nombre o email...',
-                                prefixIcon: const Icon(Icons.search),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          DropdownButton<String>(
-                            value: _filtroChoferes,
-                            items: const [
-                              DropdownMenuItem(value: 'todos', child: Text('Todos')),
-                              DropdownMenuItem(value: 'aprobado', child: Text('Aprobados')),
-                              DropdownMenuItem(value: 'pendiente', child: Text('Pendientes')),
-                              DropdownMenuItem(value: 'rechazado', child: Text('Rechazados')),
-                              DropdownMenuItem(value: 'suspendido', child: Text('Suspendidos')),
-                            ],
-                            onChanged: (value) {
-                              _filtroChoferes = value ?? 'todos';
-                              _filtrarChoferes();
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      if (_choferesFiltrados.isEmpty)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: Text('No hay choferes',
-                                style: TextStyle(color: Colors.white70)),
-                          ),
-                        )
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _choferesFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final chofer = _choferesFiltrados[index];
-                            final estado = chofer['estado'] ?? 'pendiente';
-                            final colorEstado = estado == 'aprobado'
-                                ? Colors.greenAccent
-                                : estado == 'rechazado'
-                                    ? Colors.redAccent
-                                    : estado == 'suspendido'
-                                        ? Colors.orangeAccent
-                                        : Colors.yellowAccent;
-                            
-                            return Container(
-                              padding: const EdgeInsets.all(16),
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white12,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              chofer['nombre'] ?? 'Sin nombre',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              chofer['email'] ?? 'Sin email',
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Tel: ${chofer['telefono'] ?? 'N/A'}',
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: colorEstado.withValues(alpha: 0.2),
-                                              border: Border.all(color: colorEstado),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              estado.toUpperCase(),
-                                              style: TextStyle(
-                                                color: colorEstado,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      if (estado != 'aprobado')
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.greenAccent,
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 8,
-                                              ),
-                                            ),
-                                            onPressed: () =>
-                                                _cambiarEstadoChofer(chofer['id'], 'aprobado'),
-                                            child: const Text(
-                                              'Aprobar',
-                                              style: TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      if (estado != 'aprobado')
-                                        const SizedBox(width: 8),
-                                      if (estado == 'aprobado')
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.orangeAccent,
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 8,
-                                              ),
-                                            ),
-                                            onPressed: () =>
-                                                _cambiarEstadoChofer(chofer['id'], 'suspendido'),
-                                            child: const Text(
-                                              'Suspender',
-                                              style: TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      if (estado == 'aprobado')
-                                        const SizedBox(width: 8),
-                                      Expanded(
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.redAccent,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 8,
-                                            ),
-                                          ),
-                                          onPressed: () =>
-                                              _cambiarEstadoChofer(chofer['id'], 'rechazado'),
-                                          child: const Text(
-                                            'Rechazar',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 90),
-                    ],
-                  ),
-                ),
-                // Tab 7: Notificaciones
-                const Center(child: Text('Tab 7 - Notificaciones', style: TextStyle(color: Colors.white70))),
-                // Tab 8: Bloqueos
-                const Center(child: Text('Tab 8 - Bloqueos', style: TextStyle(color: Colors.white70))),
               ],
             ),
     );
@@ -1328,6 +858,3 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
   }
 }
-
-
-

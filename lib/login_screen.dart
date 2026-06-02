@@ -40,7 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!email.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('⚠️ Ingresa un correo electrónico válido (ej: usuario@gmail.com).'),
+          content: Text(
+              '⚠️ Ingresa un correo electrónico válido (ej: usuario@gmail.com).'),
           backgroundColor: Colors.amber,
         ),
       );
@@ -63,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      if (email == 'admin@transpayy.com') {
+      if (email.toLowerCase() == 'admin@transpayy.com') {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
@@ -122,7 +123,8 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.directions_bus_rounded, size: 72, color: Color(0xFF57EAFF)),
+                  const Icon(Icons.directions_bus_rounded,
+                      size: 72, color: Color(0xFF57EAFF)),
                   const SizedBox(height: 16),
                   const Text(
                     'TransPayy',
@@ -143,7 +145,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   Card(
                     elevation: 14,
                     color: Colors.white.withOpacity(0.12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28)),
                     child: Padding(
                       padding: const EdgeInsets.all(22.0),
                       child: Column(
@@ -154,8 +157,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
                               labelText: 'Correo Electrónico',
-                              labelStyle: const TextStyle(color: Colors.white70),
-                              prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                              labelStyle:
+                                  const TextStyle(color: Colors.white70),
+                              prefixIcon: const Icon(Icons.email,
+                                  color: Colors.white70),
                               filled: true,
                               fillColor: Colors.white.withOpacity(0.08),
                               border: OutlineInputBorder(
@@ -171,8 +176,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
                               labelText: 'Contraseña',
-                              labelStyle: const TextStyle(color: Colors.white70),
-                              prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                              labelStyle:
+                                  const TextStyle(color: Colors.white70),
+                              prefixIcon:
+                                  const Icon(Icons.lock, color: Colors.white70),
                               filled: true,
                               fillColor: Colors.white.withOpacity(0.08),
                               border: OutlineInputBorder(
@@ -189,16 +196,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF40E0FF),
                                 foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
                               ),
                               onPressed: _isLoading ? null : _iniciarSesion,
                               child: _isLoading
                                   ? const SizedBox(
                                       height: 22,
                                       width: 22,
-                                      child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
+                                      child: CircularProgressIndicator(
+                                          color: Colors.black,
+                                          strokeWidth: 2.5),
                                     )
-                                  : const Text('INGRESAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  : const Text('INGRESAR',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16)),
                             ),
                           ),
                         ],
@@ -206,7 +219,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  const Text('REGISTRO', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.4)),
+                  const Text('REGISTRO',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          letterSpacing: 1.4)),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -216,14 +233,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             backgroundColor: Colors.white.withOpacity(0.12),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
                           ),
                           icon: const Icon(Icons.person_add),
                           label: const Text('Pasajero'),
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const RegistroPasajeroScreen()),
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      const RegistroPasajeroScreen()),
                             );
                           },
                         ),
@@ -235,14 +255,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             backgroundColor: Colors.white.withOpacity(0.12),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
                           ),
                           icon: const Icon(Icons.drive_eta),
                           label: const Text('Chofer'),
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const RegistroChoferScreen()),
+                              MaterialPageRoute(
+                                  builder: (_) => const RegistroChoferScreen()),
                             );
                           },
                         ),
@@ -253,10 +275,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('¿Ya tienes cuenta?', style: TextStyle(color: Colors.white70)),
+                      const Text('¿Ya tienes cuenta?',
+                          style: TextStyle(color: Colors.white70)),
                       TextButton(
                         onPressed: () {},
-                        child: const Text('Inicia sesión', style: TextStyle(color: Color(0xFF57EAFF))),
+                        child: const Text('Inicia sesión',
+                            style: TextStyle(color: Color(0xFF57EAFF))),
                       ),
                     ],
                   ),

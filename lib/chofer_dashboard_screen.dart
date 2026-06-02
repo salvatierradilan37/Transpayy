@@ -28,7 +28,9 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   double _ingresosHoy = 0.0;
   double _ingresosTotal = 0.0;
   double _calificacionPromedio = 0.0;
-  
+  List<Map<String, dynamic>> _pagosRecibidos = [];
+  final Map<String, String> _nombresPasajeros = {};
+
   // Edición de perfil
   late TextEditingController _nombreController;
   late TextEditingController _telefonoController;
@@ -43,7 +45,7 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
     _configurarTTS();
     _verificarEstadoYDatos();
     _escucharPagosEnTiempoReal();
-    _cargarEstadisticas();
+    _cargarHistorialPagos();
   }
 
   @override
@@ -66,6 +68,18 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
         .stream(primaryKey: ['id'])
         .eq('id_chofer', user.id)
         .listen((List<Map<String, dynamic>> data) async {
+          if (mounted) {
+            setState(() {
+              _pagosRecibidos = data.reversed.toList();
+            });
+            final ids = data
+                .map((pago) => pago['pasajero_id']?.toString())
+                .whereType<String>()
+                .toSet()
+                .toList();
+            await _cargarNombresPasajeros(ids);
+          }
+
           if (data.isNotEmpty) {
             final ultimoPago = data.last;
             String monto = ultimoPago['monto'].toString();
@@ -73,6 +87,58 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
             await _cargarSaldoChofer();
           }
         });
+  }
+
+  Future<void> _cargarHistorialPagos() async {
+    try {
+      final pagos = await supabase
+          .from('transacciones')
+          .select()
+          .eq('id_chofer', user.id)
+          .order('fecha', ascending: false);
+      final pagosList = pagos as List<dynamic>;
+      final pagosMap = pagosList.cast<Map<String, dynamic>>();
+      final ids = pagosMap
+          .map((pago) => pago['pasajero_id']?.toString())
+          .whereType<String>()
+          .toSet()
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _pagosRecibidos = pagosMap.reversed.toList();
+      });
+      await _cargarNombresPasajeros(ids);
+    } catch (e) {
+      debugPrint('Error cargando historial de pagos: $e');
+    }
+  }
+
+  Future<void> _cargarNombresPasajeros(List<String> ids) async {
+    final nuevosIds =
+        ids.where((id) => !_nombresPasajeros.containsKey(id)).toList();
+    if (nuevosIds.isEmpty) return;
+
+    try {
+      final filterValues =
+          nuevosIds.map((id) => "'${id.replaceAll("'", "''")}'").join(',');
+      final pasajeros = await supabase
+          .from('pasajeros')
+          .select('id, nombre_completo')
+          .filter('id', 'in', '($filterValues)');
+      final pasajerosList = pasajeros as List<dynamic>;
+      if (!mounted) return;
+      setState(() {
+        for (final pasajero in pasajerosList) {
+          final id = pasajero['id']?.toString();
+          final nombre = pasajero['nombre_completo']?.toString();
+          if (id != null && nombre != null) {
+            _nombresPasajeros[id] = nombre;
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('Error cargando nombres de pasajeros: $e');
+    }
   }
 
   Future<void> _cargarSaldoChofer() async {
@@ -136,6 +202,7 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
         final rutasRes = await supabase.from('rutas').select();
         _rutasDisponibles = rutasRes as List;
         await _cargarSaldoChofer();
+        await _cargarEstadisticas();
       }
     } catch (e) {
       debugPrint('Error cargando datos: $e');
@@ -466,39 +533,39 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
                     const SizedBox(height: 12),
                     SizedBox(
                       height: 240,
-                      child: StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: supabase.from('transacciones').stream(
-                            primaryKey: ['id']).eq('id_chofer', user.id),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                            return const Center(
-                                child: Text('Sin transacciones recientes.',
-                                    style: TextStyle(color: Colors.white70)));
-                          }
-                          final pagos = snapshot.data!.reversed.toList();
-                          return ListView.separated(
-                            itemCount: pagos.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(color: Colors.white12),
-                            itemBuilder: (context, index) {
-                              final pago = pagos[index];
-                              return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 0, vertical: 8),
-                                leading: const Icon(Icons.monetization_on,
-                                    color: Colors.greenAccent),
-                                title: Text('Monto: ${pago['monto']} Bs',
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold)),
-                                subtitle: Text('Fecha: ${pago['fecha'] ?? '-'}',
+                      child: _pagosRecibidos.isEmpty
+                          ? const Center(
+                              child: Text('Sin transacciones recientes.',
+                                  style: TextStyle(color: Colors.white70)))
+                          : ListView.separated(
+                              itemCount: _pagosRecibidos.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(color: Colors.white12),
+                              itemBuilder: (context, index) {
+                                final pago = _pagosRecibidos[index];
+                                final pasajeroId =
+                                    pago['pasajero_id']?.toString();
+                                final nombrePasajero = pasajeroId != null
+                                    ? _nombresPasajeros[pasajeroId] ??
+                                        pasajeroId.substring(0, 8)
+                                    : 'Pasajero desconocido';
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 0, vertical: 8),
+                                  leading: const Icon(Icons.monetization_on,
+                                      color: Colors.greenAccent),
+                                  title: Text('Monto: ${pago['monto']} Bs',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold)),
+                                  subtitle: Text(
+                                    'Pasajero: $nombrePasajero\nFecha: ${pago['fecha'] ?? '-'}',
                                     style:
-                                        const TextStyle(color: Colors.white70)),
-                              );
-                            },
-                          );
-                        },
-                      ),
+                                        const TextStyle(color: Colors.white70),
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -513,24 +580,33 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
 
   Future<void> _cargarEstadisticas() async {
     try {
-      final viajes = await supabase.from('transacciones').select().eq('id_chofer', user.id);
+      final viajes = await supabase
+          .from('transacciones')
+          .select()
+          .eq('id_chofer', user.id);
       final totalViajes = (viajes as List).length;
 
       double ingresosTotal = 0.0;
       double ingresosHoy = 0.0;
       final hoy = DateTime.now();
-      
+
       for (final viaje in viajes) {
         final monto = double.tryParse(viaje['monto'].toString()) ?? 0.0;
         ingresosTotal += monto;
-        
-        final fecha = DateTime.tryParse(viaje['created_at']?.toString() ?? '');
-        if (fecha != null && fecha.year == hoy.year && fecha.month == hoy.month && fecha.day == hoy.day) {
+
+        final fechaTexto =
+            viaje['fecha']?.toString() ?? viaje['created_at']?.toString() ?? '';
+        final fecha = DateTime.tryParse(fechaTexto);
+        if (fecha != null &&
+            fecha.year == hoy.year &&
+            fecha.month == hoy.month &&
+            fecha.day == hoy.day) {
           ingresosHoy += monto;
         }
       }
 
-      final resenas = await supabase.from('resenas').select().eq('id_chofer', user.id);
+      final resenas =
+          await supabase.from('resenas').select().eq('id_chofer', user.id);
       double calificacion = 0.0;
       if ((resenas as List).isNotEmpty) {
         double suma = 0.0;
@@ -554,9 +630,8 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   Future<void> _actualizarPerfil() async {
     try {
       await supabase.from('choferes').update({
-        'nombre': _nombreController.text,
-        'telefono': _telefonoController.text,
-        'numero_licencia': _licenciaController.text,
+        'nombre_completo': _nombreController.text,
+        'numero_carnet': _licenciaController.text,
       }).eq('id', user.id);
 
       if (!mounted) return;
@@ -572,6 +647,10 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
   }
 
   void _mostrarDialogoPerfil() {
+    if (_perfilChofer != null) {
+      _nombreController.text = _perfilChofer?['nombre_completo'] ?? '';
+      _licenciaController.text = _perfilChofer?['numero_carnet'] ?? '';
+    }
     showDialog(
       context: context,
       builder: (context) => ChoferProfileDialog(
