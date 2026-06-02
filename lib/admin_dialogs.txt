@@ -1,0 +1,92 @@
+  void _mostrarDialogoBloqueaUsuario(dynamic usuario, bool esChofer) {
+    final razonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bloquear Usuario'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Razón del bloqueo:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: razonController,
+              decoration: const InputDecoration(
+                hintText: 'Ej: Documentos falsificados',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              _bloquearUsuario(esChofer ? 'choferes' : 'pasajeros',
+                  usuario['id'], razonController.text);
+            },
+            child: const Text('Bloquear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _mostrarDialogoEditarChofer(dynamic chofer) {
+    final placaController = TextEditingController(text: chofer['placa_bus'] ?? '');
+    final licenciaVencimientoController = TextEditingController(
+        text: chofer['licencia_vencimiento'] ?? '');
+    final carnetVencimientoController = TextEditingController(
+        text: chofer['carnet_vencimiento'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar Datos del Chofer'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: placaController,
+                decoration: const InputDecoration(labelText: 'Placa del Bus'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: licenciaVencimientoController,
+                decoration: const InputDecoration(
+                    labelText: 'Vencimiento Licencia (YYYY-MM-DD)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: carnetVencimientoController,
+                decoration: const InputDecoration(
+                    labelText: 'Vencimiento Carnet (YYYY-MM-DD)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _actualizarDatosChofer(chofer['id'], {
+                'placa_bus': placaController.text,
+                'licencia_vencimiento': licenciaVencimientoController.text,
+                'carnet_vencimiento': carnetVencimientoController.text,
+              });
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }

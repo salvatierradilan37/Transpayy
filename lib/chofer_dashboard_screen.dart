@@ -2,6 +2,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'login_screen.dart';
+import 'chofer_extensions.dart';
 
 class ChoferDashboardScreen extends StatefulWidget {
   const ChoferDashboardScreen({super.key});
@@ -22,13 +23,35 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
 
   Map<String, dynamic>? _perfilChofer;
   List<dynamic> _rutasDisponibles = [];
+  // Estadísticas
+  int _totalViajes = 0;
+  double _ingresosHoy = 0.0;
+  double _ingresosTotal = 0.0;
+  double _calificacionPromedio = 0.0;
+  
+  // Edición de perfil
+  late TextEditingController _nombreController;
+  late TextEditingController _telefonoController;
+  late TextEditingController _licenciaController;
 
   @override
   void initState() {
     super.initState();
+    _nombreController = TextEditingController();
+    _telefonoController = TextEditingController();
+    _licenciaController = TextEditingController();
     _configurarTTS();
     _verificarEstadoYDatos();
     _escucharPagosEnTiempoReal();
+    _cargarEstadisticas();
+  }
+
+  @override
+  void dispose() {
+    _nombreController.dispose();
+    _telefonoController.dispose();
+    _licenciaController.dispose();
+    super.dispose();
   }
 
   void _configurarTTS() async {
@@ -187,6 +210,10 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
               icon: const Icon(Icons.refresh, color: Colors.white),
               onPressed: _verificarEstadoYDatos),
           IconButton(
+            icon: const Icon(Icons.person, color: Colors.white),
+            onPressed: _mostrarDialogoPerfil,
+          ),
+          IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               final navigator = Navigator.of(context);
@@ -264,6 +291,37 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold),
                           ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    // Estadísticas
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      children: [
+                        StatCard(
+                          title: 'Total Viajes',
+                          value: _totalViajes.toString(),
+                          color: Colors.blueAccent,
+                        ),
+                        StatCard(
+                          title: 'Hoy Gané',
+                          value: '${_ingresosHoy.toStringAsFixed(2)} Bs',
+                          color: Colors.greenAccent,
+                        ),
+                        StatCard(
+                          title: 'Total Ganancias',
+                          value: '${_ingresosTotal.toStringAsFixed(2)} Bs',
+                          color: Colors.amberAccent,
+                        ),
+                        StatCard(
+                          title: 'Calificación',
+                          value: _calificacionPromedio.toStringAsFixed(1),
+                          color: Colors.orangeAccent,
                         ),
                       ],
                     ),
@@ -449,6 +507,79 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _cargarEstadisticas() async {
+    try {
+      final viajes = await supabase.from('transacciones').select().eq('id_chofer', user.id);
+      final totalViajes = (viajes as List).length;
+
+      double ingresosTotal = 0.0;
+      double ingresosHoy = 0.0;
+      final hoy = DateTime.now();
+      
+      for (final viaje in viajes) {
+        final monto = double.tryParse(viaje['monto'].toString()) ?? 0.0;
+        ingresosTotal += monto;
+        
+        final fecha = DateTime.tryParse(viaje['created_at']?.toString() ?? '');
+        if (fecha != null && fecha.year == hoy.year && fecha.month == hoy.month && fecha.day == hoy.day) {
+          ingresosHoy += monto;
+        }
+      }
+
+      final resenas = await supabase.from('resenas').select().eq('id_chofer', user.id);
+      double calificacion = 0.0;
+      if ((resenas as List).isNotEmpty) {
+        double suma = 0.0;
+        for (final resena in resenas) {
+          suma += double.tryParse(resena['calificacion'].toString()) ?? 0.0;
+        }
+        calificacion = suma / resenas.length;
+      }
+
+      setState(() {
+        _totalViajes = totalViajes;
+        _ingresosTotal = ingresosTotal;
+        _ingresosHoy = ingresosHoy;
+        _calificacionPromedio = calificacion;
+      });
+    } catch (e) {
+      debugPrint('Error cargando estadísticas: $e');
+    }
+  }
+
+  Future<void> _actualizarPerfil() async {
+    try {
+      await supabase.from('choferes').update({
+        'nombre': _nombreController.text,
+        'telefono': _telefonoController.text,
+        'numero_licencia': _licenciaController.text,
+      }).eq('id', user.id);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Perfil actualizado con éxito')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
+  void _mostrarDialogoPerfil() {
+    showDialog(
+      context: context,
+      builder: (context) => ChoferProfileDialog(
+        nombreController: _nombreController,
+        telefonoController: _telefonoController,
+        licenciaController: _licenciaController,
+        email: user.email ?? '',
+        onSave: _actualizarPerfil,
       ),
     );
   }
