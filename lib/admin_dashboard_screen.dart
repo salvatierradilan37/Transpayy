@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 
@@ -36,6 +37,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     _tabController = TabController(length: 3, vsync: this);
     _cargarDatosAdmin();
   }
+
+  static const String _kPlaceholderMapBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 
   Future<void> _cargarDatosAdmin() async {
     setState(() => _isLoading = true);
@@ -718,7 +722,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                               );
                             },
                           ),
-                        const SizedBox(height: 90),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),

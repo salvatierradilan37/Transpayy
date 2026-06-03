@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'login_screen.dart';
@@ -47,6 +48,9 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
     _escucharPagosEnTiempoReal();
     _cargarHistorialPagos();
   }
+
+  static const String _kPlaceholderMapBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 
   @override
   void dispose() {
@@ -516,8 +520,68 @@ class _ChoferDashboardScreenState extends State<ChoferDashboardScreen> {
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14)),
                                 ),
-                                onPressed:
-                                    _deTurno ? null : () => _cambiarTurno(true),
+                                onPressed: _deTurno
+                                    ? null
+                                    : () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: Text(ruta['nombre_ruta'] ??
+                                                'Seleccionar Ruta'),
+                                            content: SizedBox(
+                                              height: 240,
+                                              child: Column(
+                                                children: [
+                                                  Expanded(
+                                                    child: ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                      child: Image.asset(
+                                                        'assets/maps/route_driver.png',
+                                                        fit: BoxFit.cover,
+                                                        errorBuilder:
+                                                            (c, e, s) =>
+                                                                Container(
+                                                          color: Colors.white12,
+                                                          child: Center(
+                                                            child: Image.memory(
+                                                              base64Decode(
+                                                                  _kPlaceholderMapBase64),
+                                                              height: 100,
+                                                              width: 100,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Text(
+                                                      'Origen: ${ruta['origen'] ?? '-'}'),
+                                                  Text(
+                                                      'Destino: ${ruta['destino'] ?? '-'}'),
+                                                ],
+                                              ),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(context),
+                                                  child:
+                                                      const Text('Cancelar')),
+                                              ElevatedButton(
+                                                onPressed: () {
+                                                  Navigator.pop(context);
+                                                  _cambiarTurno(true);
+                                                },
+                                                child:
+                                                    const Text('Seleccionar'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                 child: const Text('Seleccionar'),
                               ),
                             ),

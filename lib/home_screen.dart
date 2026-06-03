@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,6 +36,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _emailUsuario = user.email ?? 'usuario@transpayy.com';
     _cargarDatosCompletosPasajero();
   }
+
+  static const String _kPlaceholderMapBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
 
   @override
   void dispose() {
@@ -240,64 +244,27 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                height: 140,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0257A2), Color(0xFF00214D)],
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/maps/route_passenger.png',
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 180,
+                    color: Colors.white12,
+                    child: Center(
+                      child: Image.memory(
+                        base64Decode(_kPlaceholderMapBase64),
+                        height: 100,
+                        width: 100,
+                      ),
+                    ),
                   ),
                 ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned(
-                      left: 22,
-                      right: 22,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.circle,
-                                  color: Colors.white, size: 12),
-                              const SizedBox(height: 6),
-                              Text(ruta['origen'] ?? 'Origen',
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 12)),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Icon(Icons.circle,
-                                  color: Colors.white, size: 12),
-                              const SizedBox(height: 6),
-                              Text(ruta['destino'] ?? 'Destino',
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 12)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        20,
-                        (index) => Expanded(
-                          child: Container(
-                            height: 2,
-                            color: index.isEven ? Colors.white24 : Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               Text('Ruta: ${ruta['nombre_ruta'] ?? 'Sin nombre'}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
@@ -308,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
               if (chofer != null) ...[
                 Text(
-                    'Chofer: ${chofer['nombre'] ?? chofer['nombre_chofer'] ?? choferId}',
+                    'Chofer: ${chofer['nombre_completo'] ?? chofer['nombre'] ?? chofer['nombre_chofer'] ?? choferId}',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
                 Text('Estado: ${chofer['estado'] ?? 'Desconocido'}',
@@ -883,7 +850,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         },
                       ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
                     const Text('Historial de viajes',
                         style: TextStyle(
                             color: Colors.white,
